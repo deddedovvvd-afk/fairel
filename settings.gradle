@@ -12,5 +12,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = 'BlankStub'
-include ':app'
+rootProject.name = "PrivetButton"
+include(":app")
