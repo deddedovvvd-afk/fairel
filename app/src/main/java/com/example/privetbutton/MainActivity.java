@@ -8,18 +8,13 @@ import android.widget.FrameLayout;
 import android.widget.Toast;
 
 public class MainActivity extends Activity {
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        FrameLayout layout = new FrameLayout(this);
+    @Override public void onCreate(Bundle state) {
+        super.onCreate(state);
+        FrameLayout root = new FrameLayout(this);
         Button button = new Button(this);
         button.setText("Привет");
-        button.setOnClickListener(view -> Toast.makeText(this, "Привет!", Toast.LENGTH_SHORT).show());
-        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                Gravity.CENTER);
-        layout.addView(button, params);
-        setContentView(layout);
+        button.setOnClickListener(v -> Toast.makeText(this, "Привет!", Toast.LENGTH_SHORT).show());
+        root.addView(button, new FrameLayout.LayoutParams(-2, -2, Gravity.CENTER));
+        setContentView(root);
     }
 }
