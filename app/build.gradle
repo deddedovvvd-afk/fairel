@@ -1,16 +1,13 @@
-plugins {
-    id 'com.android.application'
-}
+plugins { id 'com.android.application' }
 
 android {
     namespace 'com.example.poultrystrike'
     compileSdk 35
-
     defaultConfig {
         applicationId 'com.example.poultrystrike'
         minSdk 23
         targetSdk 28
-        versionCode 1
-        versionName '1.0'
+        versionCode 2
+        versionName '2.0'
     }
 }
