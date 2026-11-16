@@ -1,2 +1,1 @@
-# Poultry Strike 5.0
-Controls update: corrected forward/backward joystick direction and camera swipe direction. Added a toggleable aim/zoom button. Gameplay HUD buttons (shop, maps, menu, aim and reload) are along the top; only movement joystick and fire button remain at the bottom corners. Yellow outlined enemy target zones and shot detection now use the same projected ellipse, with weapon range checks.
+Poultry Strike 5.0: controls moved to top; lower corners retain joystick and fire. Joystick and look swipe direction corrected. Aim toggle added. Yellow visible target ellipses are identical to shot hit regions; projection shared with render. Multiple maps, shop and weapon system retained.
