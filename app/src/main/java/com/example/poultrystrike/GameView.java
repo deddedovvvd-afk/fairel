@@ -1,187 +1,44 @@
 package com.example.poultrystrike;
-
-import android.content.Context;
-import android.graphics.Canvas;
-import android.graphics.Color;
-import android.graphics.Paint;
-import android.graphics.Path;
-import android.graphics.RectF;
-import android.view.MotionEvent;
-import android.view.View;
-import java.util.Random;
-
+import android.content.Context;import android.graphics.*;import android.view.*;import java.util.Random;
 public class GameView extends View {
-    private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Random rng = new Random();
-    private final Bot[] bots = new Bot[7];
-    private final float[] px = new float[8], py = new float[8];
-    private float playerX=0, playerZ=0, yaw=0, pitch=0;
-    private float joyX=0, joyY=0;
-    private int joyPointer=-1, aimPointer=-1, firePointer=-1;
-    private float lastAimX, lastAimY;
-    private boolean firing=false;
-    private int weapon=1, score=0, ammo=30;
-    private long lastShot=0, messageUntil=0, lastFrame=System.currentTimeMillis();
-    private String message="Слева — движение, справа — веди пальцем прицел";
-    private final String[] weaponNames={"ПИСТОЛЕТ","АВТОМАТ","ДРОБОВИК","НОЖ"};
-
-    private static class Bot { float x,z,phase; boolean alive=true; }
-    public GameView(Context c) {
-        super(c); setLayerType(View.LAYER_TYPE_SOFTWARE,null);
-        for(int i=0;i<bots.length;i++){ bots[i]=new Bot(); spawn(bots[i]); }
-    }
-    private void spawn(Bot b){
-        b.x=(rng.nextFloat()*2-1)*7f; b.z=9+rng.nextFloat()*18f; b.phase=rng.nextFloat()*6.28f; b.alive=true;
-    }
-    private void fill(int c){p.setColor(c);p.setStyle(Paint.Style.FILL);p.setStrokeWidth(1);}
-    private void line(Canvas c,float x1,float y1,float x2,float y2,int col,float w){fill(col);p.setStrokeWidth(w);c.drawLine(x1,y1,x2,y2,p);}
-    private void round(Canvas c,float l,float t,float r,float b,float rad,int col){fill(col);c.drawRoundRect(l,t,r,b,rad,rad,p);}
-    private void circle(Canvas c,float x,float y,float r,int col){fill(col);c.drawCircle(x,y,r,p);}
-    private void text(Canvas c,String s,float x,float y,float size,int col){fill(col);p.setTypeface(android.graphics.Typeface.create("sans-serif",android.graphics.Typeface.BOLD));p.setTextSize(size);c.drawText(s,x,y,p);}
-
-    @Override protected void onDraw(Canvas canvas){
-        super.onDraw(canvas); float sx=getWidth()/1280f, sy=getHeight()/720f; canvas.save();canvas.scale(sx,sy);
-        long now=System.currentTimeMillis();float dt=Math.min(.05f,(now-lastFrame)/1000f);lastFrame=now;
-        update(dt,now); drawScene(canvas,now);drawBots(canvas,now);drawWeapon(canvas);drawHud(canvas,now);
-        canvas.restore();postInvalidateDelayed(16);
-    }
-    private void update(float dt,long now){
-        float forward=-joyY, strafe=joyX; float speed=5.0f;
-        playerX+=(strafe*(float)Math.cos(yaw)+forward*(float)Math.sin(yaw))*speed*dt;
-        playerZ+=(forward*(float)Math.cos(yaw)-strafe*(float)Math.sin(yaw))*speed*dt;
-        playerX=Math.max(-10,Math.min(10,playerX));playerZ=Math.max(-3,Math.min(5,playerZ));
-        if(firing && now-lastShot>(weapon==1?115:weapon==0?330:weapon==2?650:480)) attack(now);
-    }
-
-    // Perspective projection of world coordinates into the first-person camera.
-    private boolean project(float x,float y,float z,float[] out){
-        float dx=x-playerX,dz=z-playerZ;float sy=(float)Math.sin(yaw),cy=(float)Math.cos(yaw);
-        float vx=dx*cy-dz*sy, vz=dx*sy+dz*cy;
-        float cp=(float)Math.cos(pitch),sp=(float)Math.sin(pitch);
-        float vy=(y-1.55f)*cp-vz*sp;float depth=(y-1.55f)*sp+vz*cp;
-        if(depth<.22f)return false;
-        out[0]=640+vx*540/depth;out[1]=350-vy*540/depth;return true;
-    }
-    private void poly(Canvas c,float[][] pts,int col){
-        Path path=new Path();path.moveTo(pts[0][0],pts[0][1]);for(int i=1;i<pts.length;i++)path.lineTo(pts[i][0],pts[i][1]);path.close();fill(col);c.drawPath(path,p);
-    }
-    private void quadWorld(Canvas c,float x1,float z1,float x2,float z2,float y,int col){
-        float[][] a=new float[4][2];float[] q=new float[2];
-        if(!project(x1,y,z1,q))return;a[0]=q.clone();if(!project(x2,y,z1,q))return;a[1]=q.clone();if(!project(x2,y,z2,q))return;a[2]=q.clone();if(!project(x1,y,z2,q))return;a[3]=q.clone();poly(c,a,col);
-    }
-    private void drawScene(Canvas c,long now){
-        // sky, distant hills and sunlight
-        p.setShader(new android.graphics.LinearGradient(0,0,0,460,Color.rgb(70,160,216),Color.rgb(205,228,238),android.graphics.Shader.TileMode.CLAMP));c.drawRect(0,0,1280,480,p);p.setShader(null);
-        circle(c,1040,105,43,Color.rgb(255,226,133));
-        poly(c,new float[][]{{0,350},{130,265},{270,345},{430,245},{600,345},{790,255},{990,350},{1120,270},{1280,345},{1280,500},{0,500}},Color.rgb(82,129,111));
-        // large 3D floor plane
-        quadWorld(c,-18,-6,18,34,0,Color.rgb(158,147,119));
-        // tiled perspective arena floor
-        for(int z=-4;z<35;z+=2) quadWorld(c,-18,z,18,z+.045f,0,(z/2%2==0)?Color.rgb(174,160,129):Color.rgb(165,153,124));
-        for(int x=-18;x<=18;x+=2) quadWorld(c,x,-5,x+.04f,34,.012f,Color.rgb(124,118,99));
-        // perimeter walls and colored panels
-        box(c,-12,0,12,1.4f,30,Color.rgb(108,132,130),Color.rgb(74,102,101));
-        box(c,-12,0,-5,1.4f,30,Color.rgb(112,137,135),Color.rgb(77,103,102));
-        box(c,-12,0,12,1.4f,-5,Color.rgb(156,123,87),Color.rgb(110,82,62));
-        // chunky 3D cover blocks and crates
-        box(c,-6,0,8,2.0f,10,Color.rgb(190,126,67),Color.rgb(123,76,42));
-        box(c,4,0,14,1.7f,18,Color.rgb(66,122,103),Color.rgb(43,80,71));
-        box(c,-2,0,18,1.2f,23,Color.rgb(177,94,64),Color.rgb(115,61,49));
-        box(c,8,0,10,1.4f,6,Color.rgb(158,154,139),Color.rgb(101,105,103));
-        // cover panel decoration
-        text(c,"ARENA  /  TRAINING",430,100,22,Color.argb(160,255,255,255));
-    }
-    private void box(Canvas c,float x,float y,float z,float h,float w,int front,int side){
-        float[][] v={{x,y,z},{x+w,y,z},{x+w,y+h,z},{x,y+h,z},{x+w,y,z+w},{x+w,y+h,z+w}};float[][] s=new float[v.length][2];
-        for(int i=0;i<v.length;i++)if(!project(v[i][0],v[i][1],v[i][2],s[i]))return;
-        poly(c,new float[][]{s[0],s[1],s[2],s[3]},front);
-        poly(c,new float[][]{s[1],s[4],s[5],s[2]},side);
-        // top face gives the blocks a clear 3D look
-        poly(c,new float[][]{s[3],s[2],s[5],new float[]{s[3][0]+(s[4][0]-s[0][0]),s[3][1]+(s[4][1]-s[0][1])}},Color.rgb(Math.min(255,Color.red(front)+25),Math.min(255,Color.green(front)+25),Math.min(255,Color.blue(front)+25)));
-        // crate seams
-        line(c,(s[0][0]+s[1][0])/2,(s[0][1]+s[1][1])/2,(s[3][0]+s[2][0])/2,(s[3][1]+s[2][1])/2,Color.argb(110,255,220,150),2);
-    }
-    private void drawBots(Canvas c,long now){
-        for(Bot b:bots)if(b.alive){
-            float wob=(float)Math.sin(now/280.0+b.phase)*.16f;float[] foot=new float[2],head=new float[2],left=new float[2],right=new float[2];
-            if(!project(b.x,0,b.z,foot)||!project(b.x,2.05f,b.z,head))continue;
-            float h=foot[1]-head[1]; if(h<4||h>900)continue;float w=h*.52f;
-            // soft ground shadow
-            fill(Color.argb(45,0,0,0));c.drawOval(foot[0]-w*.48f,foot[1]-h*.035f,foot[0]+w*.48f,foot[1]+h*.025f,p);
-            // boots, legs, body armor
-            round(c,foot[0]-w*.34f,foot[1]-h*.20f,foot[0]-w*.03f,foot[1],h*.05f,Color.rgb(46,54,49));
-            round(c,foot[0]+w*.03f,foot[1]-h*.20f,foot[0]+w*.34f,foot[1],h*.05f,Color.rgb(46,54,49));
-            round(c,foot[0]-w*.42f,foot[1]-h*.72f,foot[0]+w*.42f,foot[1]-h*.18f,h*.13f,Color.rgb(211,179,126));
-            // backpack/arms
-            round(c,foot[0]-w*.58f,foot[1]-h*.66f,foot[0]-w*.32f,foot[1]-h*.35f,h*.07f,Color.rgb(49,91,75));
-            round(c,foot[0]+w*.31f,foot[1]-h*.65f,foot[0]+w*.56f,foot[1]-h*.39f,h*.07f,Color.rgb(224,190,135));
-            // chicken head, helmet, beak and eyes
-            circle(c,foot[0],head[1]+h*.22f,w*.30f,Color.rgb(255,235,195));
-            round(c,foot[0]-w*.34f,head[1]+h*.08f,foot[0]+w*.34f,head[1]+h*.24f,h*.08f,Color.rgb(46,101,77));
-            circle(c,foot[0]-w*.11f,head[1]+h*.03f,w*.09f,Color.rgb(222,70,60));circle(c,foot[0]+w*.02f,head[1]+h*.01f,w*.09f,Color.rgb(222,70,60));
-            circle(c,foot[0]-w*.11f,head[1]+h*.21f,Math.max(2,w*.035f),Color.BLACK);circle(c,foot[0]+w*.12f,head[1]+h*.21f,Math.max(2,w*.035f),Color.BLACK);
-            fill(Color.rgb(239,159,48));c.drawOval(foot[0]-w*.03f,head[1]+h*.29f,foot[0]+w*.23f,head[1]+h*.39f,p);
-            // target indicator when near center of aim
-            float aimDist=(float)Math.hypot(foot[0]-640,head[1]+h*.2f-350);
-            if(aimDist<65){fill(Color.argb(210,255,68,55));p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(3);c.drawCircle(foot[0],head[1]+h*.2f,w*.43f,p);p.setStyle(Paint.Style.FILL);}
-        }
-    }
-    private void drawWeapon(Canvas c){
-        if(weapon==3){ // first-person knife
-            poly(c,new float[][]{{795,720},{885,720},{826,545},{790,510},{778,530}},Color.rgb(186,202,208));
-            line(c,790,555,850,697,Color.rgb(245,250,250),5);round(c,825,660,895,720,12,Color.rgb(57,65,70));
-        }else{
-            int metal=Color.rgb(51,58,64),light=Color.rgb(105,116,123);
-            if(weapon==0){round(c,565,625,740,720,18,metal);round(c,612,587,688,650,9,light);round(c,630,566,670,610,5,metal);}
-            else if(weapon==1){round(c,500,625,780,720,20,metal);round(c,550,590,755,650,10,light);round(c,590,572,735,603,5,metal);round(c,590,675,635,720,6,Color.rgb(103,76,53));}
-            else{round(c,510,625,770,720,22,metal);round(c,550,587,740,650,10,light);round(c,568,567,650,603,7,Color.rgb(70,78,82));round(c,666,567,748,603,7,Color.rgb(70,78,82));}
-        }
-    }
-    private void drawHud(Canvas c,long now){
-        round(c,20,18,285,92,16,Color.argb(205,19,28,34));text(c,"POULTRY STRIKE 3D",38,48,22,Color.WHITE);text(c,"ОЧКИ: "+score,38,77,22,Color.rgb(255,219,87));
-        round(c,1005,18,1260,92,16,Color.argb(205,19,28,34));text(c,"ЗАРЯД: "+(weapon==3?"∞":ammo),1025,53,21,Color.WHITE);text(c,weaponNames[weapon],1025,79,16,Color.rgb(255,219,87));
-        // centered movable-aim reticle
-        p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(3);p.setColor(Color.WHITE);c.drawCircle(640,350,22,p);c.drawLine(600,350,626,350,p);c.drawLine(654,350,680,350,p);c.drawLine(640,310,640,336,p);c.drawLine(640,364,640,390,p);p.setStyle(Paint.Style.FILL);circle(c,640,350,3,Color.rgb(240,66,53));
-        // movement joystick, interactive when pressed
-        circle(c,125,588,75,Color.argb(80,20,28,34));circle(c,125+joyX*38,588-joyY*38,31,Color.argb(185,235,240,241));text(c,"ДВИЖЕНИЕ",63,690,15,Color.WHITE);
-        // fire and reload
-        circle(c,1140,570,72,Color.argb(185,210,65,48));text(c,weapon==3?"УДАР":"ОГОНЬ",1092,578,23,Color.WHITE);
-        round(c,1036,650,1243,703,14,Color.argb(190,25,34,40));text(c,"ПЕРЕЗАРЯДКА",1053,683,17,Color.WHITE);
-        // quick-select weapon strip
-        String[] names={"ПИСТ","АВТО","ДРОБ","НОЖ"};
-        for(int i=0;i<4;i++){int x=390+i*126;int col=(weapon==i)?Color.rgb(227,166,55):Color.argb(205,24,35,42);round(c,x,650,x+112,703,13,col);text(c,names[i],x+14,683,17,Color.WHITE);}
-        if(now<messageUntil){round(c,340,104,940,148,14,Color.argb(195,20,29,35));text(c,message,360,133,20,Color.WHITE);}
-        else if(score>=25){round(c,460,104,820,148,14,Color.argb(210,27,115,68));text(c,"КЛАСС! 25 ПОПАДАНИЙ",480,133,20,Color.WHITE);}
-        text(c,"Проведи пальцем по правой части экрана — двигай прицел",352,618,16,Color.argb(220,255,255,255));
-    }
-    private void attack(long now){
-        lastShot=now;
-        if(weapon!=3&&ammo<=0){message="ПАТРОНЫ КОНЧИЛИСЬ — ПЕРЕЗАРЯДИСЬ";messageUntil=now+1200;firing=false;return;}
-        if(weapon!=3)ammo-=weapon==2?3:1;
-        Bot hit=null;float best=999;
-        for(Bot b:bots)if(b.alive){float[] q=new float[2];if(!project(b.x,1.2f,b.z,q))continue;float d=(float)Math.hypot(q[0]-640,q[1]-350);float tolerance=weapon==3?80:weapon==2?68:weapon==1?43:34;float range=weapon==3?2.5f:42;
-            float dist=(float)Math.hypot(b.x-playerX,b.z-playerZ);if(d<tolerance&&dist<range&&dist<best){best=dist;hit=b;}}
-        if(hit!=null){hit.alive=false;score++;message=(weapon==3?"НОЖЕВОЙ УДАР":"ПОПАДАНИЕ")+"  +1";messageUntil=now+650;spawn(hit);}else if(weapon==3){message="Подойди ближе и наведи прицел";messageUntil=now+700;}else{message="Мимо! Веди прицел пальцем";messageUntil=now+600;}
-    }
-    private void selectWeapon(float x,float y){if(y>=640&&y<=715&&x>=380&&x<890){int i=(int)((x-390)/126);if(i>=0&&i<4){weapon=i;message="Выбрано: "+weaponNames[i];messageUntil=System.currentTimeMillis()+700;}}}
-    @Override public boolean onTouchEvent(MotionEvent e){
-        int action=e.getActionMasked(), index=e.getActionIndex(), id=e.getPointerId(index);float x=e.getX(index)*1280/getWidth(),y=e.getY(index)*720/getHeight();
-        if(action==MotionEvent.ACTION_DOWN||action==MotionEvent.ACTION_POINTER_DOWN){
-            if(x<270&&y>455){joyPointer=id;setJoy(x,y);}
-            else if(x>=380&&x<890&&y>=640){selectWeapon(x,y);}
-            else if(x>1010&&y>635){ammo=30;message="ПЕРЕЗАРЯЖЕНО";messageUntil=System.currentTimeMillis()+650;}
-            else if(x>1035&&y>460&&y<640){firePointer=id;firing=true;attack(System.currentTimeMillis());}
-            else{aimPointer=id;lastAimX=x;lastAimY=y;}
-        }else if(action==MotionEvent.ACTION_MOVE){
-            for(int i=0;i<e.getPointerCount();i++){int pid=e.getPointerId(i);float tx=e.getX(i)*1280/getWidth(),ty=e.getY(i)*720/getHeight();
-                if(pid==joyPointer)setJoy(tx,ty);
-                if(pid==aimPointer){float dx=tx-lastAimX,dy=ty-lastAimY; yaw-=dx*.0062f;pitch=Math.max(-.72f,Math.min(.72f,pitch+dy*.005f));lastAimX=tx;lastAimY=ty;}
-            }
-        }else if(action==MotionEvent.ACTION_POINTER_UP||action==MotionEvent.ACTION_UP||action==MotionEvent.ACTION_CANCEL){
-            if(id==joyPointer){joyPointer=-1;joyX=joyY=0;}if(id==aimPointer)aimPointer=-1;if(id==firePointer){firePointer=-1;firing=false;}
-            if(action==MotionEvent.ACTION_UP||action==MotionEvent.ACTION_CANCEL){joyPointer=aimPointer=firePointer=-1;joyX=joyY=0;firing=false;}
-        }
-        return true;
-    }
-    private void setJoy(float x,float y){float dx=(x-125)/70f,dy=(588-y)/70f;float len=(float)Math.hypot(dx,dy);if(len>1){dx/=len;dy/=len;}joyX=dx;joyY=dy;}
+ final Paint p=new Paint(3);final Random random=new Random();final Enemy[] enemies=new Enemy[6];
+ final String[] names={"ПИСТОЛЕТ","АВТОМАТ","ДРОБОВИК","СНАЙПЕРКА","НОЖ"}, maps={"ПОЛИГОН","ПУСТЫНЯ","СНЕЖНАЯ БАЗА"};final int[] cost={0,180,260,350,120};final boolean[] owned={true,false,false,false,false};
+ int screen=0,map=0,weapon=0,coins=250,score=0,ammo=12;float px=0,pz=0,yaw=0,pitch=0,jx=0,jy=0,lastX,lastY;int joy=-1,look=-1,fire=-1;boolean firing=false;long shot=0,frame=System.currentTimeMillis(),toastTime=0;String toast="";
+ static class Enemy{float x,z;boolean alive;}
+ public GameView(Context c){super(c);setLayerType(View.LAYER_TYPE_SOFTWARE,null);for(int i=0;i<enemies.length;i++){enemies[i]=new Enemy();spawn(enemies[i]);}}
+ void spawn(Enemy e){e.x=random.nextFloat()*14-7;e.z=10+random.nextFloat()*16;e.alive=true;}
+ void say(String s){toast=s;toastTime=System.currentTimeMillis()+1300;}
+ void fill(int c){p.setColor(c);p.setStyle(Paint.Style.FILL);p.setShader(null);p.setStrokeWidth(1);}
+ void rect(Canvas c,float l,float t,float r,float b,int col){fill(col);c.drawRect(l,t,r,b,p);}void rr(Canvas c,float l,float t,float r,float b,float rad,int col){fill(col);c.drawRoundRect(l,t,r,b,rad,rad,p);}void circ(Canvas c,float x,float y,float r,int col){fill(col);c.drawCircle(x,y,r,p);}void text(Canvas c,String s,float x,float y,float size,int col){fill(col);p.setTypeface(Typeface.create("sans-serif",Typeface.BOLD));p.setTextSize(size);c.drawText(s,x,y,p);}void ln(Canvas c,float x,float y,float a,float b,int col,float w){fill(col);p.setStrokeWidth(w);c.drawLine(x,y,a,b,p);}
+ protected void onDraw(Canvas c){super.onDraw(c);c.save();c.scale(getWidth()/1280f,getHeight()/720f);long now=System.currentTimeMillis();float dt=Math.min(.05f,(now-frame)/1000f);frame=now;if(screen==0)menu(c);else if(screen==1)shop(c);else if(screen==2)maps(c);else{update(dt,now);world(c);targets(c);weaponDraw(c);hud(c);}if(now<toastTime){rr(c,390,105,890,155,13,Color.argb(225,20,28,34));text(c,toast,410,137,20,Color.WHITE);}c.restore();postInvalidateDelayed(16);}
+ void update(float dt,long n){float f=-jy,s=jx;px+=(s*(float)Math.cos(yaw)+f*(float)Math.sin(yaw))*4*dt;pz+=(f*(float)Math.cos(yaw)-s*(float)Math.sin(yaw))*4*dt;px=Math.max(-10,Math.min(10,px));pz=Math.max(-4,Math.min(5,pz));if(firing&&n-shot>delay())shoot(n);}
+ int delay(){return weapon==1?120:weapon==2?650:weapon==3?850:weapon==4?450:320;}
+ // Perspective mapping shared by rendering and hit detection.
+ float[] project(float x,float y,float z){float dx=x-px,dz=z-pz,s=(float)Math.sin(yaw),co=(float)Math.cos(yaw);float right=dx*co-dz*s,forward=dx*s+dz*co;if(forward<.3f)return null;float cp=(float)Math.cos(pitch),sp=(float)Math.sin(pitch),depth=forward*cp+(y-1.5f)*sp;if(depth<.3f)return null;float vert=(y-1.5f)*cp-forward*sp;return new float[]{640+right*560/depth,350-vert*560/depth};}
+ void world(Canvas c){int sky=map==1?0xffe9b36c:map==2?0xffa9d0e5:0xff66b2dc,ground=map==1?0xffbd986b:map==2?0xffc7d4da:0xff9a9277; p.setShader(new LinearGradient(0,0,0,450,sky,0xffe5e4d8,Shader.TileMode.CLAMP));c.drawRect(0,0,1280,450,p);p.setShader(null);rect(c,0,425,1280,720,ground);int hill=map==1?0xffa17b50:map==2?0xffc5d3d8:0xff557e69;Path h=new Path();h.moveTo(0,390);h.lineTo(140,280);h.lineTo(290,390);h.lineTo(500,265);h.lineTo(720,390);h.lineTo(930,280);h.lineTo(1280,380);h.lineTo(1280,460);h.lineTo(0,460);h.close();fill(hill);c.drawPath(h,p);
+  for(int x=-12;x<=12;x+=2){float[] a=project(x,0,2),b=project(x,0,35);if(a!=null&&b!=null)ln(c,a[0],a[1],b[0],b[1],0x554f5046,2);}for(int z=3;z<35;z+=3){float[] a=project(-15,0,z),b=project(15,0,z);if(a!=null&&b!=null)ln(c,a[0],a[1],b[0],b[1],0x554f5046,2);}
+  box(c,-7,10,2.5f,2.2f,0xffb87943,0xff795334);box(c,4,16,2.8f,2.3f,0xff4d806a,0xff36594b);box(c,-2,24,3.5f,1.5f,0xffb15d42,0xff744630);box(c,8,8,2,1.8f,0xff8c918d,0xff626b6c);text(c,maps[map],545,105,19,0xddffffff);}
+ void box(Canvas c,float x,float z,float w,float h,int a,int b){float[] q1=project(x,0,z),q2=project(x+w,0,z),q3=project(x+w,h,z),q4=project(x,h,z),q5=project(x+w,0,z+w),q6=project(x+w,h,z+w);if(q1==null||q2==null||q3==null||q4==null||q5==null||q6==null)return;poly(c,new float[][]{q1,q2,q3,q4},a);poly(c,new float[][]{q2,q5,q6,q3},b);poly(c,new float[][]{q4,q3,q6,new float[]{q4[0]+q5[0]-q1[0],q4[1]+q5[1]-q1[1]}},a+0x181818);}
+ void poly(Canvas c,float[][] a,int col){Path path=new Path();path.moveTo(a[0][0],a[0][1]);for(int i=1;i<a.length;i++)path.lineTo(a[i][0],a[i][1]);path.close();fill(col);c.drawPath(path,p);}
+ // Enemy torso/head drawing and clickable shot region use the same projected ellipse.
+ void targets(Canvas c){for(Enemy e:enemies)if(e.alive){float[] foot=project(e.x,0,e.z),head=project(e.x,1.9f,e.z),center=project(e.x,1.1f,e.z);if(foot==null||head==null||center==null)continue;float h=foot[1]-head[1],w=h*.48f;if(h<5||h>700)continue;circ(c,foot[0],foot[1],Math.max(3,w*.4f),0x33000000);rr(c,foot[0]-w*.34f,foot[1]-h*.23f,foot[0]+w*.34f,foot[1]-h*.12f,h*.04f,0xff343a35);rr(c,foot[0]-w*.4f,foot[1]-h*.72f,foot[0]+w*.4f,foot[1]-h*.17f,h*.1f,0xffebd0a4);circ(c,center[0],center[1],w*.30f,0xffffedc8);rr(c,center[0]-w*.34f,center[1]-h*.20f,center[0]+w*.34f,center[1]-h*.05f,h*.07f,0xff32644d);circ(c,center[0]-w*.1f,center[1]-h*.24f,w*.07f,0xffdf5048);circ(c,center[0]+w*.03f,center[1]-h*.26f,w*.07f,0xffdf5048);circ(c,center[0]-w*.1f,center[1]-h*.01f,Math.max(2,w*.035f),Color.BLACK);circ(c,center[0]+w*.12f,center[1]-h*.01f,Math.max(2,w*.035f),Color.BLACK);fill(0xffffa32c);c.drawOval(center[0]-w*.03f,center[1]+h*.04f,center[0]+w*.23f,center[1]+h*.13f,p);
+   p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(2);p.setColor(0x99ffffff);c.drawOval(center[0]-w*.38f,center[1]-h*.20f,center[0]+w*.38f,center[1]+h*.17f,p);p.setStyle(Paint.Style.FILL);}}
+ void weaponDraw(Canvas c){if(weapon==4){poly(c,new float[][]{{900,720},{977,720},{1075,508},{1044,490},{1018,520}},0xffc5d2d8);ln(c,1040,535,940,700,Color.WHITE,4);rr(c,880,675,958,720,10,0xff41484d);return;}rr(c,925,624,1160,720,17,0xff303940);rr(c,960,588,1147,651,9,0xff717e85);if(weapon==0){rr(c,1014,568,1088,618,7,0xff434c52);}else if(weapon==1){rr(c,1045,568,1150,601,5,0xff40494f);rr(c,978,670,1022,720,6,0xff70543e);}else if(weapon==2){rr(c,950,560,1030,604,7,0xff515b61);rr(c,1050,560,1130,604,7,0xff515b61);}else{rr(c,1040,560,1150,600,5,0xff41494e);}}
+ void hud(Canvas c){rr(c,18,18,280,94,14,0xcc17232a);text(c,"STRIKE / "+maps[map],35,48,18,Color.WHITE);text(c,"Очки "+score+"  $"+coins,35,77,19,0xffffdc62);rr(c,1000,18,1260,93,14,0xcc17232a);text(c,names[weapon],1018,49,16,Color.WHITE);text(c,weapon==4?"∞":"ПАТРОНЫ "+ammo,1018,76,18,0xffffdc62);
+  p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(3);p.setColor(Color.WHITE);c.drawCircle(640,350,21,p);c.drawLine(600,350,626,350,p);c.drawLine(654,350,680,350,p);c.drawLine(640,310,640,336,p);c.drawLine(640,364,640,390,p);p.setStyle(Paint.Style.FILL);circ(c,640,350,3,Color.RED);
+  circ(c,120,585,72,0x55202a30);circ(c,120+jx*34,585-jy*34,30,0xbbf1f3f4);text(c,"MOVE",86,686,15,Color.WHITE);circ(c,1135,560,68,0xffcd4937);text(c,weapon==4?"УДАР":"ОГОНЬ",1090,568,21,Color.WHITE);rr(c,1030,635,1245,699,13,0xe51b292f);text(c,"МАГАЗИН",1065,675,19,Color.WHITE);rr(c,25,635,220,699,13,0xe51b292f);text(c,"МЕНЮ",86,675,20,Color.WHITE);}
+ void shoot(long now){shot=now;if(weapon!=4&&ammo<=0){say("Пусто — перезарядка в магазине");firing=false;return;}if(weapon!=4)ammo--;Enemy hit=null;float best=Float.MAX_VALUE;for(Enemy e:enemies)if(e.alive){float[] q=project(e.x,1.1f,e.z);if(q==null)continue;float depth=(float)Math.hypot(e.x-px,e.z-pz),h=560*1.9f/depth,w=h*.48f;float dx=(640-q[0])/(w*.38f),dy=(350-q[1])/(h*.185f);float range=weapon==4?2.6f:weapon==3?45:35;if(dx*dx+dy*dy<=1&&depth<=range&&depth<best){best=depth;hit=e;}}if(hit!=null){hit.alive=false;score++;coins+=10;say("Попадание! +10 монет");spawn(hit);}else say(weapon==4?"Подойди ближе к цели":"Мимо — наведи прицел на курицу");}
+ void begin(){screen=3;px=pz=yaw=pitch=0;ammo=maxAmmo();for(Enemy e:enemies)spawn(e);}
+ int maxAmmo(){return weapon==0?12:weapon==1?30:weapon==2?8:weapon==3?5:0;}
+ void bg(Canvas c,int col){p.setShader(new LinearGradient(0,0,1280,720,col,0xff66777a,Shader.TileMode.CLAMP));c.drawRect(0,0,1280,720,p);p.setShader(null);circ(c,1050,160,120,0x22ffffff);}
+ void menu(Canvas c){bg(c,0xff263b49);text(c,"POULTRY STRIKE",350,160,58,Color.WHITE);text(c,"ARENA SHOOTER",495,208,22,0xffffd15d);button(c,440,270,840,350,"ИГРАТЬ",0xffd14635,34);button(c,440,380,840,460,"МАГАЗИН",0xff347659,28);button(c,440,490,840,570,"ВЫБРАТЬ КАРТУ",0xff485b6d,24);text(c,"Монеты: $"+coins+"    Оружие покупается в магазине",350,635,19,Color.WHITE);}
+ void button(Canvas c,int l,int t,int r,int b,String s,int col,int size){rr(c,l,t,r,b,18,col);text(c,s,l+35,(t+b)/2f+size*.35f,size,Color.WHITE);}
+ void shop(Canvas c){bg(c,0xff29373e);text(c,"МАГАЗИН ОРУЖИЯ     $"+coins,330,80,36,Color.WHITE);button(c,25,25,190,88,"НАЗАД",0xff52616a,20);for(int i=0;i<5;i++){int x=38+i*245;rr(c,x,145,x+220,540,18,weapon==i?0xff42624f:0xff3a4a52);text(c,names[i],x+15,190,17,Color.WHITE);rr(c,x+55,245,x+165,305,9,0xff222b30);text(c,owned[i]?(weapon==i?"ЭКИПИРОВАНО":"ЕСТЬ"):"ЦЕНА $"+cost[i],x+27,390,18,0xffffdc62);button(c,x+18,430,x+202,492,owned[i]?"ВЫБРАТЬ":"КУПИТЬ",owned[i]?0xff38875a:0xffbb7139,18);}text(c,"Попадания дают монеты. Нажми на карточку, чтобы купить или экипировать.",230,620,18,Color.WHITE);}
+ void maps(Canvas c){bg(c,0xff293b49);text(c,"ВЫБОР КАРТЫ",445,85,40,Color.WHITE);button(c,25,25,190,88,"НАЗАД",0xff52616a,20);for(int i=0;i<3;i++){int x=92+i*375;rr(c,x,180,x+335,510,18,i==map?0xff41624f:0xff465258);int sky=i==1?0xffe4b16f:i==2?0xffaed2e1:0xff69b4da;rect(c,x+12,192,x+323,355,sky);rect(c,x+12,355,x+323,495,i==1?0xffb99163:i==2?0xffcad9df:0xff938b70);text(c,maps[i],x+36,430,22,Color.WHITE);button(c,x+42,525,x+294,588,i==map?"ВЫБРАНА":"ВЫБРАТЬ",0xff34865b,20);}button(c,470,625,810,690,"НАЧАТЬ ИГРУ",0xffd14635,22);}
+ boolean in(float x,float y,int l,int t,int r,int b){return x>=l&&x<=r&&y>=t&&y<=b;}
+ void joystick(float x,float y){float a=(x-120)/68f,b=(585-y)/68f,d=(float)Math.hypot(a,b);if(d>1){a/=d;b/=d;}jx=a;jy=b;}
+ public boolean onTouchEvent(MotionEvent e){int act=e.getActionMasked(),i=e.getActionIndex(),id=e.getPointerId(i);float x=e.getX(i)*1280/getWidth(),y=e.getY(i)*720/getHeight();if(act==MotionEvent.ACTION_DOWN||act==MotionEvent.ACTION_POINTER_DOWN){if(screen==0){if(in(x,y,440,270,840,350))begin();else if(in(x,y,440,380,840,460))screen=1;else if(in(x,y,440,490,840,570))screen=2;return true;}if(screen==1){if(in(x,y,25,25,190,88)){screen=0;return true;}for(int k=0;k<5;k++){int bx=38+k*245;if(in(x,y,bx,145,bx+220,540)){if(owned[k]){weapon=k;ammo=maxAmmo();say("Выбрано: "+names[k]);}else if(coins>=cost[k]){coins-=cost[k];owned[k]=true;weapon=k;ammo=maxAmmo();say("Куплено: "+names[k]);}else say("Не хватает монет");return true;}}return true;}if(screen==2){if(in(x,y,25,25,190,88)){screen=0;return true;}for(int k=0;k<3;k++){int bx=92+k*375;if(in(x,y,bx,180,bx+335,590))map=k;}if(in(x,y,470,625,810,690))begin();return true;}
+  if(x<240&&y>455&&y<625){joy=id;joystick(x,y);return true;}if(x<235&&y>625){screen=0;joy=look=fire=-1;jx=jy=0;return true;}if(x>1010&&y>625){screen=1;joy=look=fire=-1;jx=jy=0;return true;}if(x>1050&&y>470&&y<625){fire=id;firing=true;shoot(System.currentTimeMillis());return true;}look=id;lastX=x;lastY=y;return true;}
+ if(act==MotionEvent.ACTION_MOVE){for(int k=0;k<e.getPointerCount();k++){int pid=e.getPointerId(k);float tx=e.getX(k)*1280/getWidth(),ty=e.getY(k)*720/getHeight();if(pid==joy)joystick(tx,ty);if(pid==look){yaw-=(tx-lastX)*.006f;pitch=Math.max(-.6f,Math.min(.6f,pitch+(ty-lastY)*.005f));lastX=tx;lastY=ty;}}return true;}
+ if(act==MotionEvent.ACTION_UP||act==MotionEvent.ACTION_POINTER_UP||act==MotionEvent.ACTION_CANCEL){if(id==joy){joy=-1;jx=jy=0;}if(id==look)look=-1;if(id==fire){fire=-1;firing=false;}if(act==MotionEvent.ACTION_CANCEL){joy=look=fire=-1;jx=jy=0;firing=false;}return true;}return true;}
 }
