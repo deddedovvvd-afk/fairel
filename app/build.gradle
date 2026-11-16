@@ -3,13 +3,13 @@ plugins {
 }
 
 android {
-    namespace 'com.example.privetbutton'
+    namespace 'com.example.poultrystrike'
     compileSdk 35
 
     defaultConfig {
-        applicationId 'com.example.privetbutton'
+        applicationId 'com.example.poultrystrike'
         minSdk 23
-        targetSdk 35
+        targetSdk 28
         versionCode 1
         versionName '1.0'
     }
