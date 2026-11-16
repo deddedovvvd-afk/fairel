@@ -1,12 +1,5 @@
-# Poultry Strike 3D
+# Poultry Strike 4.0
 
-Обновлённая оригинальная мини-игра для Android с видом от первого лица и псевдо-3D ареной, построенной перспективной отрисовкой.
+Updated Android arena mini-game. The main menu offers Play, Shop and Map Selection (training range, desert, snow base). Buy and equip weapons with coins earned from hits. Weapon is drawn on the right side. Touch-drag in the view turns the camera; left joystick moves; fire button shoots.
 
-Управление:
-- Левая нижняя виртуальная зона — двигаться и стрейфить.
-- Проводи пальцем по остальной части экрана — поворачивать камеру и двигать прицел по 3D-карте.
-- Красная кнопка справа — стрелять/атаковать.
-- Кнопки снизу — переключать пистолет, автомат, дробовик и нож.
-- Перезарядка — пополнить боезапас.
-
-Самостоятельная игра, без ресурсов или брендинга других игр. APK собирается в GitHub Actions командой `gradle assembleDebug`.
+Hit detection is performed in the same perspective-projected screen coordinates as the rendered enemy torso/target ellipse, with range checks by weapon. Debug APK is built using GitHub Actions.
